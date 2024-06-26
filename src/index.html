@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Resume Score Checker (NLP Enhanced)</title>
+  <link rel="icon" type="image/png" href="../public/assets/box_1749624.png">
+  <link rel="stylesheet" href="../src/css/style.css">
+  <script src="../src/js/tf.min.js"></script>
+  <script src="../src/js/universal-sentence-encoder.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fuzzywuzzy@0.6.1/dist/fuzzywuzzy.min.js"></script>
+</head>
+
+<body>
+  <div class="container" id="container">
+    <h1>Resume Score Checker (NLP Enhanced)</h1>
+    <label for="hr-skills">Enter Skills (comma-separated):</label>
+    <input type="text" id="hr-skills">
+    <label for="resume-upload" class="upload-btn" id="upload-btn">Upload Resume</label>
+    <input type="file" id="resume-upload" accept=".pdf, .docx, .png">
+    <p>Accepted file types: PDF, DOCX, PNG</p>
+    <div id="result"></div>
+    <div id="loading">
+      <div class="spinner"></div>
+    </div>
+  </div>
+
+  <script>
+    async function loadModel() {
+      console.log('Loading model...');
+      try {
+        const model = await use.load();
+        console.log('Model loaded successfully');
+        return model;
+      } catch (error) {
+        console.error('Error loading model:', error);
+        throw error;
+      }
+    }
+
+    function preprocessText(text) {
+      // Remove punctuation
+      const noPunctuation = text.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "");
+
+      // Implement stemming/lemmatization (optional)
+      // You can use libraries like NLTK (https://www.nltk.org/)
+
+      return noPunctuation.toLowerCase().trim();  // Convert to lowercase and trim whitespace
+    }
+
+    async function calculateScore(text, model, hrSkills) {
+      try {
+        const embeddings = await model.embed([text]);
+        const keywords = hrSkills.split(',').map(skill => skill.trim().toLowerCase());
+        const preprocessedText = preprocessText(text);
+
+        let score = 0;
+
+        for (const keyword of keywords) {
+          const preprocessedKeyword = preprocessText(keyword);
+          const exactMatchScore = preprocessedText.includes(preprocessedKeyword) ? 2 : 0; // Higher score for exact match
+
+          // Use fuzzywuzzy for partial match scoring
+          const partialMatchRatio = fuzzywuzzy.fuzz.ratio(preprocessedText, preprocessedKeyword);
+          const partialMatchScore = Math.max(partialMatchRatio * 1.5, 0); // Scale based on ratio
+
+          score += Math.max(exactMatchScore, partialMatchScore);
+        }
+
+        // Calculate percentage score based on total number of skills
+        const percentageScore = (score / (keywords.length * 2)) * 100; // Consider the maximum possible score
+
+        return percentageScore;
+      } catch (error) {
+        console.error('Error:', error);
+        document.getElementById('result').textContent = 'An error occurred processing your resume. Please try again later.';
+        return 0;
+      }
+    }
+
+    document.getElementById('resume-upload').addEventListener('change', async function (e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = async function (e) {
+        const text = e.target.result;
+
+        // Log parsed text to console
+        console.log('Parsed resume text:', text);
+
+        // Get HR-entered skills
+        const hrSkills = document.getElementById('hr-skills').value;
+
+        // Show loading animation
+        document.getElementById('loading').style.display = 'block';
+
+        try {
+          const model = await loadModel();
+          const score = await calculateScore(text, model, hrSkills);
+
+          // Hide loading animation
+          document.getElementById('loading').style.display = 'none';
+
+          // Display the result
+          document.getElementById('result').textContent = `Your resume score is: ${score.toFixed(2)}%`;
+        } catch (error) {
+          console.error('Error processing resume:', error);
+          document.getElementById('result').textContent = 'An error occurred processing your resume. Please try again later.';
+        }
+      };
+
+      reader.readAsText(file);
+    });
+  </script>
+</body>
+
+</html>
